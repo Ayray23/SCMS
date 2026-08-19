@@ -3,10 +3,15 @@ import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { createComplaint, uploadAttachment } from '../../services/complaintService'
+import { fetchDepartments } from '../../services/referenceDataService'
+import { useAuth } from '../../context/AuthContext'
 import { ArrowLeft, CheckCircle, FileText, ShieldCheck, Upload } from 'lucide-react'
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024 // must match storage.rules
 
 export default function NewComplaint() {
   const navigate = useNavigate()
+  const { user, profile } = useAuth()
   const fileInputRef = useRef(null)
   const {
     register,
@@ -16,6 +21,8 @@ export default function NewComplaint() {
   } = useForm()
   const [attachmentFile, setAttachmentFile] = useState(null)
   const [submitted, setSubmitted] = useState(false)
+  const [departments, setDepartments] = useState([])
+  const [departmentsLoading, setDepartmentsLoading] = useState(true)
   const DRAFT_KEY = 'scms-draft-complaint'
 
   useEffect(() => {
@@ -35,7 +42,29 @@ export default function NewComplaint() {
     }
   }, [])
 
+  useEffect(() => {
+    let mounted = true
+    fetchDepartments()
+      .then((data) => { if (mounted) setDepartments(data) })
+      .catch((err) => console.error('Failed to load departments', err))
+      .finally(() => { if (mounted) setDepartmentsLoading(false) })
+    return () => { mounted = false }
+  }, [])
+
+  function handleFileSelect(file) {
+    if (file && file.size > MAX_ATTACHMENT_BYTES) {
+      toast.error('Attachment must be smaller than 10MB')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    setAttachmentFile(file)
+  }
+
   async function onSubmit(values) {
+    if (!user) {
+      toast.error('You must be logged in to submit a complaint')
+      return
+    }
     try {
       let attachmentUrl = null
       let attachmentName = null
@@ -43,7 +72,7 @@ export default function NewComplaint() {
       if (attachmentFile) {
         // if attachmentFile is a plain object (restored draft hint) we require reattach
         if (attachmentFile instanceof File) {
-          attachmentUrl = await uploadAttachment(attachmentFile)
+          attachmentUrl = await uploadAttachment(attachmentFile, user.uid)
           attachmentName = attachmentFile.name
         } else if (attachmentFile && attachmentFile.name) {
           attachmentName = attachmentFile.name
@@ -51,7 +80,9 @@ export default function NewComplaint() {
       }
 
       await createComplaint({
-        studentId: 'demo-student',
+        studentId: user.uid,
+        studentName: profile?.fullName ?? null,
+        studentMatric: profile?.matricNumber ?? null,
         referenceNumber: `SCMS-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)
           .toString()
           .padStart(4, '0')}`,
@@ -174,12 +205,16 @@ export default function NewComplaint() {
           <div className="grid gap-6 lg:grid-cols-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</span>
-              <input
-                type="text"
-                placeholder="Student Affairs"
+              <select
                 className="mt-3 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+                disabled={departmentsLoading}
                 {...register('department', { required: 'Department is required' })}
-              />
+              >
+                <option value="">{departmentsLoading ? 'Loading…' : 'Select department'}</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.name}>{dept.name}</option>
+                ))}
+              </select>
               {errors.department && <p className="mt-2 text-sm text-red-600">{errors.department.message}</p>}
             </label>
 
@@ -219,7 +254,7 @@ export default function NewComplaint() {
                 onChange={(event) => {
                   const file = event.target.files?.[0]
                   if (file) {
-                    setAttachmentFile(file)
+                    handleFileSelect(file)
                   }
                 }}
               />

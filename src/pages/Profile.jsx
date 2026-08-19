@@ -3,18 +3,30 @@ import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { updateUserProfile } from '../services/authService'
 
 export default function Profile() {
   const { profile } = useAuth()
-  const [editing, setEditing] = useState(false)
   const [fullName, setFullName] = useState(profile?.fullName || '')
   const [email] = useState(profile?.email || '')
+  const [saving, setSaving] = useState(false)
   const navigate = useNavigate()
 
-  function save() {
-    // Placeholder: persist profile changes to backend
-    setEditing(false)
-    toast.success('Profile updated')
+  async function save() {
+    if (!fullName.trim()) {
+      toast.error('Full name cannot be empty')
+      return
+    }
+    setSaving(true)
+    try {
+      await updateUserProfile({ fullName: fullName.trim() })
+      toast.success('Profile updated')
+    } catch (err) {
+      console.error(err)
+      toast.error(err.message || 'Failed to update profile')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -50,10 +62,10 @@ export default function Profile() {
               </div>
             </div>
             <div className="mt-6 flex gap-3">
-              <button onClick={save} className="inline-flex items-center gap-2 rounded-3xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
-                <CheckCircle className="h-4 w-4" /> Save changes
+              <button onClick={save} disabled={saving} className="inline-flex items-center gap-2 rounded-3xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                <CheckCircle className="h-4 w-4" /> {saving ? 'Saving…' : 'Save changes'}
               </button>
-              <button onClick={() => { setFullName(profile?.fullName || ''); setEditing(false) }} className="rounded-3xl border border-slate-200 px-4 py-2 text-sm">Cancel</button>
+              <button onClick={() => setFullName(profile?.fullName || '')} className="rounded-3xl border border-slate-200 px-4 py-2 text-sm">Cancel</button>
             </div>
           </div>
 
@@ -61,7 +73,8 @@ export default function Profile() {
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Account</p>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-400">
               <p><strong>Role:</strong> {profile?.role ?? 'Student'}</p>
-              <p><strong>UID:</strong> {profile?.uid ?? 'N/A'}</p>
+              <p><strong>Matric number:</strong> {profile?.matricNumber ?? 'N/A'}</p>
+              <p><strong>Department:</strong> {profile?.department ?? 'N/A'}</p>
               <p className="mt-3">Use the settings page to manage notifications and security options.</p>
             </div>
           </div>

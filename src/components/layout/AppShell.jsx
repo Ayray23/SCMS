@@ -3,8 +3,6 @@ import { Link, NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Bell,
-  Search,
-  MessageSquare,
   Moon,
   Sun,
   Home,
@@ -23,6 +21,7 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { useDarkMode } from '../../context/DarkModeContext'
 import { logoutStudent } from '../../services/authService'
+import { fetchUserNotifications, markNotificationRead } from '../../services/notificationService'
 
 const studentNavItems = [
   { to: '/student/dashboard', label: 'Dashboard', icon: Home },
@@ -50,11 +49,52 @@ const adminNavItems = [
 ]
 
 export default function AppShell({ children }) {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const { isDark, toggle: toggleDarkMode } = useDarkMode()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  )
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
   const navItems = profile?.role === 'admin' ? adminNavItems : studentNavItems
+
+  const closeSidebarOnMobile = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true
+    if (!user?.uid) return
+    fetchUserNotifications(user.uid)
+      .then((data) => { if (mounted) setNotifications(data) })
+      .catch((err) => console.error('Failed to load notifications', err))
+    return () => { mounted = false }
+  }, [user])
+
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(true)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const unreadCount = notifications.filter((n) => !n.read).length
+
+  async function handleMarkRead(notif) {
+    if (notif.read) return
+    try {
+      await markNotificationRead(notif.id)
+      setNotifications((prev) => prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n)))
+    } catch (err) {
+      console.error('Failed to mark notification read', err)
+    }
+  }
 
   const handleNavAction = (item) => {
     if (item.action === 'logout') {
@@ -72,7 +112,7 @@ export default function AppShell({ children }) {
             <button
               type="button"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 lg:hidden"
             >
               {sidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
             </button>
@@ -82,24 +122,46 @@ export default function AppShell({ children }) {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-3">
-            <div className="relative">
-              <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                placeholder="Search complaints, students, or cases"
-                className="h-11 w-[28rem] rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </div>
-          </div>
-
           <div className="flex items-center gap-2">
-            <button className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-              <Bell size={18} />
-            </button>
-            <button className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-              <MessageSquare size={18} />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotifOpen(!notifOpen)}
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <Bell size={18} />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute right-0 mt-3 w-80 max-h-96 overflow-y-auto rounded-3xl border border-slate-200 bg-white py-2 shadow-xl shadow-slate-900/10 dark:border-slate-700 dark:bg-slate-900"
+                >
+                  {notifications.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No notifications yet.</p>
+                  ) : (
+                    notifications.map((notif) => (
+                      <button
+                        key={notif.id}
+                        type="button"
+                        onClick={() => handleMarkRead(notif)}
+                        className={`block w-full px-4 py-3 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                          notif.read ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-slate-100 font-medium'
+                        }`}
+                      >
+                        <p>{notif.title}</p>
+                        {notif.message && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{notif.message}</p>}
+                      </button>
+                    ))
+                  )}
+                </motion.div>
+              )}
+            </div>
             <button
               type="button"
               onClick={toggleDarkMode}
@@ -143,10 +205,17 @@ export default function AppShell({ children }) {
       </header>
 
       <div className="pt-16">
-        <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl gap-6 lg:grid-cols-[280px_1fr] xl:gap-8 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-[280px_1fr] lg:gap-8 lg:px-8">
+          {sidebarOpen && (
+            <div
+              onClick={() => setSidebarOpen(false)}
+              className="fixed inset-0 top-16 z-30 bg-slate-950/50 lg:hidden"
+              aria-hidden="true"
+            />
+          )}
           <aside
-            className={`mt-6 z-20 min-h-[calc(100vh-4rem)] overflow-hidden rounded-[2rem] border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-900/5 transition-all duration-300 dark:border-slate-800 dark:bg-slate-950/95 ${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+            className={`fixed inset-y-0 left-0 top-16 z-40 w-[85vw] max-w-xs overflow-y-auto rounded-none border-r border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10 transition-transform duration-300 dark:border-slate-800 dark:bg-slate-950 lg:sticky lg:top-20 lg:z-20 lg:mt-6 lg:h-[calc(100vh-6rem)] lg:w-auto lg:max-w-none lg:translate-x-0 lg:rounded-[2rem] lg:border lg:shadow-xl lg:shadow-slate-900/5 lg:bg-white/95 lg:dark:bg-slate-950/95 ${
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
             <div className="flex items-center gap-3 rounded-3xl bg-blue-600 px-4 py-4 text-white shadow-sm">
@@ -161,7 +230,7 @@ export default function AppShell({ children }) {
 
                 {/* Reports link handled inside navItems */}
             <div className="mt-6">
-              <NavLink to="/" className="flex items-center gap-3 rounded-3xl px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+              <NavLink onClick={closeSidebarOnMobile} to="/" className="flex items-center gap-3 rounded-3xl px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                 <Home className="h-4 w-4" />
                 Home
               </NavLink>
@@ -193,7 +262,10 @@ export default function AppShell({ children }) {
                     <button
                       key={item.label}
                       type="button"
-                      onClick={() => handleNavAction(item)}
+                      onClick={() => {
+                        handleNavAction(item)
+                        closeSidebarOnMobile()
+                      }}
                       className="flex w-full items-center gap-3 rounded-3xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
                     >
                       <Icon className="h-4 w-4" />
@@ -203,7 +275,7 @@ export default function AppShell({ children }) {
                 }
 
                 return (
-                  <NavLink key={item.label} to={item.to} className={itemClasses}>
+                  <NavLink key={item.label} to={item.to} onClick={closeSidebarOnMobile} className={itemClasses}>
                     <Icon className="h-4 w-4" />
                     {item.label}
                   </NavLink>
@@ -212,8 +284,8 @@ export default function AppShell({ children }) {
             </div>
           </aside>
 
-          <main className="min-h-[calc(100vh-4rem)] pb-10">
-            <div className="mx-auto min-w-0 w-full max-w-7xl space-y-10 px-4 sm:px-6 lg:px-8">
+          <main className="min-h-[calc(100vh-4rem)] pb-10 lg:min-w-0">
+            <div className="mx-auto min-w-0 w-full max-w-7xl space-y-6 sm:space-y-10">
               {children}
               <footer className="rounded-[2rem] border border-slate-200 bg-white/90 p-6 text-sm text-slate-500 shadow-sm shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-400">
                 <p>Need help? Visit the support center or contact your university IT services.</p>

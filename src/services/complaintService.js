@@ -16,7 +16,8 @@ import { db, storage } from '../firebase/client'
 
 const complaintsRef = collection(db, 'complaints')
 
-export async function uploadAttachment(file, studentId = 'demo-student') {
+export async function uploadAttachment(file, studentId) {
+  if (!studentId) throw new Error('uploadAttachment requires the current user\'s uid')
   const storageRef = ref(storage, `complaint-attachments/${studentId}/${Date.now()}-${file.name}`)
   const snapshot = await uploadBytesResumable(storageRef, file)
   return getDownloadURL(snapshot.ref)

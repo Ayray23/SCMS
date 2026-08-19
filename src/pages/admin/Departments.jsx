@@ -3,55 +3,76 @@ import { Plus, Trash2, Edit2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { SkeletonCard } from '../../components/common/Skeleton'
 import { EmptyState } from '../../components/common/EmptyState'
+import { fetchDepartments, createDepartment, updateDepartment, deleteDepartment } from '../../services/referenceDataService'
 
 export default function AdminDepartments() {
   const [departments, setDepartments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState({ name: '', description: '', code: '' })
 
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await fetchDepartments()
+      setDepartments(data)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load departments')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    // Load departments from localStorage (demo)
-    const stored = localStorage.getItem('scms-departments')
-    setDepartments(stored ? JSON.parse(stored) : [])
-    setLoading(false)
+    load()
   }, [])
 
-  const handleSave = () => {
-    if (!form.name) {
+  const handleSave = async () => {
+    if (!form.name.trim()) {
       toast.error('Department name is required')
       return
     }
 
-    let updated
-    if (editingId) {
-      updated = departments.map(d => d.id === editingId ? { ...d, ...form, updatedAt: new Date().toISOString() } : d)
-      toast.success('Department updated')
-    } else {
-      updated = [...departments, { id: Date.now(), ...form, createdAt: new Date().toISOString() }]
-      toast.success('Department created')
+    setSaving(true)
+    try {
+      if (editingId) {
+        await updateDepartment(editingId, form)
+        toast.success('Department updated')
+      } else {
+        await createDepartment(form)
+        toast.success('Department created')
+      }
+      await load()
+      setForm({ name: '', description: '', code: '' })
+      setEditingId(null)
+      setShowForm(false)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to save department')
+    } finally {
+      setSaving(false)
     }
-
-    setDepartments(updated)
-    localStorage.setItem('scms-departments', JSON.stringify(updated))
-    setForm({ name: '', description: '', code: '' })
-    setEditingId(null)
-    setShowForm(false)
   }
 
   const handleEdit = (dept) => {
-    setForm(dept)
+    setForm({ name: dept.name ?? '', description: dept.description ?? '', code: dept.code ?? '' })
     setEditingId(dept.id)
     setShowForm(true)
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Delete this department?')) return
-    const updated = departments.filter(d => d.id !== id)
-    setDepartments(updated)
-    localStorage.setItem('scms-departments', JSON.stringify(updated))
-    toast.success('Department deleted')
+    try {
+      await deleteDepartment(id)
+      setDepartments((prev) => prev.filter((d) => d.id !== id))
+      toast.success('Department deleted')
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to delete department')
+    }
   }
 
   const handleCancel = () => {
@@ -69,6 +90,9 @@ export default function AdminDepartments() {
           <div>
             <p className="text-sm uppercase tracking-[0.28em] text-blue-600">Manage System</p>
             <h1 className="mt-3 text-3xl font-semibold text-slate-950 dark:text-white">Departments</h1>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              These departments appear as options for students during registration and when submitting a complaint.
+            </p>
           </div>
           {!showForm && (
             <button
@@ -120,9 +144,10 @@ export default function AdminDepartments() {
             <div className="flex gap-3">
               <button
                 onClick={handleSave}
-                className="rounded-3xl bg-blue-600 px-6 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+                disabled={saving}
+                className="rounded-3xl bg-blue-600 px-6 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
               >
-                Save
+                {saving ? 'Saving…' : 'Save'}
               </button>
               <button
                 onClick={handleCancel}
@@ -139,7 +164,7 @@ export default function AdminDepartments() {
         {departments.length === 0 ? (
           <EmptyState
             title="No departments"
-            description="Create your first department to get started."
+            description="Create your first department to get started. Students won't be able to register or file complaints until at least one exists."
           />
         ) : (
           <div className="overflow-x-auto">

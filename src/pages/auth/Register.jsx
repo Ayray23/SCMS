@@ -1,9 +1,10 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 import { registerStudent } from '../../services/authService'
+import { fetchDepartments, fetchFaculties } from '../../services/referenceDataService'
 import {
   ArrowLeft,
   CheckCircle,
@@ -17,6 +18,55 @@ import {
   Users,
 } from 'lucide-react'
 
+// Fallback options so registration works on day one, before an admin has
+// added any real departments/faculties via the admin panel. Once real ones
+// exist in Firestore they're merged in alongside these (deduped by name),
+// so this list never blocks or hides anything an admin adds later.
+const DEFAULT_DEPARTMENTS = [
+  'Computer Science',
+  'Electrical/Electronic Engineering',
+  'Mechanical Engineering',
+  'Civil Engineering',
+  'Accounting',
+  'Business Administration',
+  'Economics',
+  'Mass Communication',
+  'Law',
+  'Medicine and Surgery',
+  'Nursing Science',
+  'Biochemistry',
+  'Microbiology',
+  'Physics',
+  'Chemistry',
+  'Mathematics',
+  'English Language',
+  'Political Science',
+  'Sociology',
+  'Architecture',
+]
+
+const DEFAULT_FACULTIES = [
+  'Faculty of Science',
+  'Faculty of Engineering',
+  'Faculty of Arts',
+  'Faculty of Social Sciences',
+  'Faculty of Law',
+  'Faculty of Basic Medical Sciences',
+  'Faculty of Clinical Sciences',
+  'Faculty of Technology',
+  'Faculty of Education',
+  'Faculty of Agriculture',
+]
+
+// Combine fetched Firestore options with the fallback list, preferring the
+// Firestore entry when a name appears in both (it may carry a real id/code).
+function mergeOptions(fetched, fallbackNames) {
+  const byName = new Map()
+  fallbackNames.forEach((name) => byName.set(name.toLowerCase(), { id: name, name }))
+  fetched.forEach((item) => byName.set(item.name.toLowerCase(), item))
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
 export default function Register() {
   const navigate = useNavigate()
   const {
@@ -28,6 +78,32 @@ export default function Register() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const password = watch('password', '')
+  const [departments, setDepartments] = useState(DEFAULT_DEPARTMENTS.map((name) => ({ id: name, name })))
+  const [faculties, setFaculties] = useState(DEFAULT_FACULTIES.map((name) => ({ id: name, name })))
+  const [optionsLoading, setOptionsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    async function loadOptions() {
+      try {
+        const [depts, facs] = await Promise.all([fetchDepartments(), fetchFaculties()])
+        if (!mounted) return
+        setDepartments(mergeOptions(depts, DEFAULT_DEPARTMENTS))
+        setFaculties(mergeOptions(facs, DEFAULT_FACULTIES))
+      } catch (err) {
+        // Fall back to the built-in lists above (already the initial state)
+        // - this keeps registration working even if Firestore isn't reachable
+        // yet (fresh project, rules not deployed, or offline).
+        console.warn('Could not load departments/faculties from the database, using defaults', err)
+      } finally {
+        if (mounted) setOptionsLoading(false)
+      }
+    }
+    loadOptions()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   async function onSubmit(values) {
     if (values.password !== values.confirmPassword) {
@@ -153,12 +229,17 @@ export default function Register() {
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</span>
-                  <input
-                    type="text"
-                    placeholder="Computer Science"
+                  <select
                     className="mt-3 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-                    {...register('department')}
-                  />
+
+                    {...register('department', { required: 'Department is required' })}
+                  >
+                    <option value="">Select department</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.name}>{dept.name}</option>
+                    ))}
+                  </select>
+                  {errors.department && <p className="mt-2 text-sm text-red-600">{errors.department.message}</p>}
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Level</span>
@@ -168,6 +249,23 @@ export default function Register() {
                     className="mt-3 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                     {...register('level')}
                   />
+                </label>
+              </div>
+
+              <div>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Faculty</span>
+                  <select
+                    className="mt-3 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+
+                    {...register('faculty', { required: 'Faculty is required' })}
+                  >
+                    <option value="">Select faculty</option>
+                    {faculties.map((fac) => (
+                      <option key={fac.id} value={fac.name}>{fac.name}</option>
+                    ))}
+                  </select>
+                  {errors.faculty && <p className="mt-2 text-sm text-red-600">{errors.faculty.message}</p>}
                 </label>
               </div>
 

@@ -3,55 +3,76 @@ import { Plus, Trash2, Edit2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { SkeletonCard } from '../../components/common/Skeleton'
 import { EmptyState } from '../../components/common/EmptyState'
+import { fetchFaculties, createFaculty, updateFaculty, deleteFaculty } from '../../services/referenceDataService'
 
 export default function AdminFaculties() {
   const [faculties, setFaculties] = useState([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState({ name: '', description: '', dean: '' })
 
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await fetchFaculties()
+      setFaculties(data)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to load faculties')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    // Load faculties from localStorage (demo)
-    const stored = localStorage.getItem('scms-faculties')
-    setFaculties(stored ? JSON.parse(stored) : [])
-    setLoading(false)
+    load()
   }, [])
 
-  const handleSave = () => {
-    if (!form.name) {
+  const handleSave = async () => {
+    if (!form.name.trim()) {
       toast.error('Faculty name is required')
       return
     }
 
-    let updated
-    if (editingId) {
-      updated = faculties.map(f => f.id === editingId ? { ...f, ...form, updatedAt: new Date().toISOString() } : f)
-      toast.success('Faculty updated')
-    } else {
-      updated = [...faculties, { id: Date.now(), ...form, createdAt: new Date().toISOString() }]
-      toast.success('Faculty created')
+    setSaving(true)
+    try {
+      if (editingId) {
+        await updateFaculty(editingId, form)
+        toast.success('Faculty updated')
+      } else {
+        await createFaculty(form)
+        toast.success('Faculty created')
+      }
+      await load()
+      setForm({ name: '', description: '', dean: '' })
+      setEditingId(null)
+      setShowForm(false)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to save faculty')
+    } finally {
+      setSaving(false)
     }
-
-    setFaculties(updated)
-    localStorage.setItem('scms-faculties', JSON.stringify(updated))
-    setForm({ name: '', description: '', dean: '' })
-    setEditingId(null)
-    setShowForm(false)
   }
 
   const handleEdit = (faculty) => {
-    setForm(faculty)
+    setForm({ name: faculty.name ?? '', description: faculty.description ?? '', dean: faculty.dean ?? '' })
     setEditingId(faculty.id)
     setShowForm(true)
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Delete this faculty?')) return
-    const updated = faculties.filter(f => f.id !== id)
-    setFaculties(updated)
-    localStorage.setItem('scms-faculties', JSON.stringify(updated))
-    toast.success('Faculty deleted')
+    try {
+      await deleteFaculty(id)
+      setFaculties((prev) => prev.filter((f) => f.id !== id))
+      toast.success('Faculty deleted')
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to delete faculty')
+    }
   }
 
   const handleCancel = () => {
@@ -69,6 +90,9 @@ export default function AdminFaculties() {
           <div>
             <p className="text-sm uppercase tracking-[0.28em] text-blue-600">Manage System</p>
             <h1 className="mt-3 text-3xl font-semibold text-slate-950 dark:text-white">Faculties</h1>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              These faculties appear as options for students during registration.
+            </p>
           </div>
           {!showForm && (
             <button
@@ -120,9 +144,10 @@ export default function AdminFaculties() {
             <div className="flex gap-3">
               <button
                 onClick={handleSave}
-                className="rounded-3xl bg-blue-600 px-6 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+                disabled={saving}
+                className="rounded-3xl bg-blue-600 px-6 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
               >
-                Save
+                {saving ? 'Saving…' : 'Save'}
               </button>
               <button
                 onClick={handleCancel}
@@ -139,7 +164,7 @@ export default function AdminFaculties() {
         {faculties.length === 0 ? (
           <EmptyState
             title="No faculties"
-            description="Create your first faculty to get started."
+            description="Create your first faculty to get started. Students won't be able to register until at least one exists."
           />
         ) : (
           <div className="overflow-x-auto">

@@ -1,13 +1,64 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
+import { useAuth } from '../context/AuthContext'
+import { updateUserProfile, changePassword } from '../services/authService'
 
 export default function Settings() {
-  const [emailNotifications, setEmailNotifications] = useState(true)
-  const [smsNotifications, setSmsNotifications] = useState(false)
+  const { profile } = useAuth()
+  const [emailNotifications, setEmailNotifications] = useState(profile?.emailNotifications ?? true)
+  const [smsNotifications, setSmsNotifications] = useState(profile?.smsNotifications ?? false)
+  const [savingPrefs, setSavingPrefs] = useState(false)
 
-  function save() {
-    // Placeholder: save settings
-    toast.success('Settings saved')
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
+
+  async function savePrefs() {
+    setSavingPrefs(true)
+    try {
+      await updateUserProfile({ emailNotifications, smsNotifications })
+      toast.success('Settings saved')
+    } catch (err) {
+      console.error(err)
+      toast.error(err.message || 'Failed to save settings')
+    } finally {
+      setSavingPrefs(false)
+    }
+  }
+
+  async function handleChangePassword() {
+    if (!currentPassword || !newPassword) {
+      toast.error('Fill in both password fields')
+      return
+    }
+    if (newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match')
+      return
+    }
+    setChangingPassword(true)
+    try {
+      await changePassword(currentPassword, newPassword)
+      toast.success('Password updated')
+      setShowPasswordForm(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      console.error(err)
+      const message =
+        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
+          ? 'Current password is incorrect'
+          : err.message || 'Failed to change password'
+      toast.error(message)
+    } finally {
+      setChangingPassword(false)
+    }
   }
 
   return (
@@ -35,18 +86,67 @@ export default function Settings() {
               </label>
             </div>
             <div className="mt-6">
-              <button onClick={save} className="rounded-3xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Save preferences</button>
+              <button onClick={savePrefs} disabled={savingPrefs} className="rounded-3xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                {savingPrefs ? 'Saving…' : 'Save preferences'}
+              </button>
             </div>
           </div>
 
           <div className="rounded-[1.25rem] border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Security</p>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-400">
-              <p>Change password and enable two-factor authentication in your university account settings.</p>
+              <p>Update the password used to sign in to your account.</p>
             </div>
-            <div className="mt-6">
-              <button className="rounded-3xl border border-slate-200 px-4 py-2 text-sm">Change password</button>
-            </div>
+
+            {!showPasswordForm ? (
+              <div className="mt-6">
+                <button onClick={() => setShowPasswordForm(true)} className="rounded-3xl border border-slate-200 px-4 py-2 text-sm dark:border-slate-700">Change password</button>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-3">
+                <input
+                  type="password"
+                  placeholder="Current password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                />
+                <input
+                  type="password"
+                  placeholder="New password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={changingPassword}
+                    className="rounded-3xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {changingPassword ? 'Updating…' : 'Update password'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPasswordForm(false)
+                      setCurrentPassword('')
+                      setNewPassword('')
+                      setConfirmPassword('')
+                    }}
+                    className="rounded-3xl border border-slate-200 px-4 py-2 text-sm dark:border-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>

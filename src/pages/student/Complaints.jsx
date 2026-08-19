@@ -9,7 +9,7 @@ import { EmptyState } from '../../components/common/EmptyState'
 const filters = ['All', 'Pending', 'In Review', 'Resolved', 'Escalated']
 
 export default function Complaints() {
-  const { profile } = useAuth()
+  const { user } = useAuth()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -29,7 +29,8 @@ export default function Complaints() {
     async function load() {
       setLoading(true)
       try {
-        const id = profile?.id ?? 'demo-student'
+        const id = user?.uid
+        if (!id) return
         const data = await fetchComplaintsByStudent(id)
         if (!mounted) return
         setItems(
@@ -49,7 +50,7 @@ export default function Complaints() {
     return () => {
       mounted = false
     }
-  }, [profile])
+  }, [user])
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {

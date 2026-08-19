@@ -1,9 +1,10 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 import { loginStudent } from '../../services/authService'
+import { useAuth } from '../../context/AuthContext'
 import {
   ArrowRight,
   ArrowLeft,
@@ -19,6 +20,7 @@ import {
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user, loading: authLoading } = useAuth()
   const {
     register,
     handleSubmit,
@@ -27,6 +29,18 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loginError, setLoginError] = useState('')
+  const [justLoggedIn, setJustLoggedIn] = useState(false)
+
+  // Wait for AuthContext to actually pick up the signed-in user before
+  // redirecting - navigating right after loginStudent() resolves is a race
+  // condition, since onAuthStateChanged updates the context asynchronously
+  // on its own callback rather than as part of that call.
+  useEffect(() => {
+    if (justLoggedIn && !authLoading && user) {
+      const from = location.state?.from?.pathname || '/student/dashboard'
+      navigate(from, { replace: true })
+    }
+  }, [justLoggedIn, authLoading, user, location, navigate])
 
   async function onSubmit(values) {
     setLoginError('')
@@ -34,8 +48,7 @@ export default function Login() {
       setLoading(true)
       await loginStudent(values.email, values.password)
       toast.success('Welcome back 👋')
-      const from = location.state?.from?.pathname || '/student/dashboard'
-      navigate(from, { replace: true })
+      setJustLoggedIn(true)
     } catch (err) {
       const message = err.message || 'Login failed'
       setLoginError(message)

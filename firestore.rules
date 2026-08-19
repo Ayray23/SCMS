@@ -1,0 +1,130 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // users/{userId} — one profile doc per auth account, doc id == uid
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Self-registration only ever creates a "student" account for yourself.
+      // Admin accounts must be created manually (Firebase console or a
+      // trusted backend) — never through the client SDK. One exception: the
+      // single built-in default admin email is allowed to self-provision as
+      // "admin" (see DEFAULT_ADMIN_EMAIL in authService.js) - this is tied to
+      // request.auth.token.email, which only Firebase's own sign-in flow can
+      // set, so nobody else can grant themselves admin this way.
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && (
+          request.resource.data.role == 'student' ||
+          (request.resource.data.role == 'admin' && request.auth.token.email == 'admin@scms.local')
+        );
+
+      // You can edit your own profile, but never your own role — and you
+      // can't change someone else's uid/id fields either. Admins can edit
+      // any profile (e.g. to promote a user or deactivate an account).
+      allow update: if isAdmin()
+        || (isOwner(userId)
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.uid == resource.data.uid);
+
+      allow delete: if isAdmin();
+    }
+
+    // complaints/{complaintId}
+    match /complaints/{complaintId} {
+      allow read: if isSignedIn() &&
+        (resource.data.studentId == request.auth.uid || isAdmin());
+
+      // A student can only file a complaint under their own uid, starting
+      // as Pending.
+      allow create: if isSignedIn() &&
+        request.resource.data.studentId == request.auth.uid &&
+        request.resource.data.status == 'Pending';
+
+      allow update: if isAdmin() ||
+        (
+          isOwner(resource.data.studentId) &&
+          (
+            // student editing their own complaint details
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['title', 'description', 'priority', 'updatedAt'])
+            ||
+            // student withdrawing their own still-pending complaint
+            (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt']) &&
+              resource.data.status == 'Pending' &&
+              request.resource.data.status == 'Withdrawn'
+            )
+          )
+        );
+
+      allow delete: if false;
+
+      // complaints/{complaintId}/events — activity log, append-only
+      match /events/{eventId} {
+        function parentComplaint() {
+          return get(/databases/$(database)/documents/complaints/$(complaintId)).data;
+        }
+
+        allow read: if isSignedIn() &&
+          (parentComplaint().studentId == request.auth.uid || isAdmin());
+
+        allow create: if isSignedIn() &&
+          (parentComplaint().studentId == request.auth.uid || isAdmin()) &&
+          request.resource.data.actorId == request.auth.uid;
+
+        allow update, delete: if false;
+      }
+    }
+
+    // departments/{departmentId} and faculties/{facultyId} — reference data
+    // shown as dropdown options on the (public, pre-login) registration page
+    // and the complaint submission form. Not sensitive - just names - so
+    // read access is public. Only admins can manage them.
+    match /departments/{departmentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /faculties/{facultyId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // notifications/{notificationId}
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() &&
+        (request.resource.data.userId == request.auth.uid || isAdmin());
+
+      // Only the "read" flag can be toggled, and only by its owner.
+      allow update: if isOwner(resource.data.userId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+      allow delete: if false;
+    }
+
+    // Deny anything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

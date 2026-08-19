@@ -180,7 +180,7 @@ export default function Home() {
               {profile ? (
                 <>
                   <Link to={profile.role === 'admin' ? '/admin/dashboard' : '/student/dashboard'} className="rounded-3xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900">Dashboard</Link>
-                  <Link to="/auth/login" className="rounded-3xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900">Profile</Link>
+                  <Link to={profile.role === 'admin' ? '/admin/profile' : '/student/profile'} className="rounded-3xl px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900">Profile</Link>
                 </>
               ) : (
                 <>

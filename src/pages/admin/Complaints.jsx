@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchAllComplaints } from '../../services/complaintService'
-import { Filter, Search } from 'lucide-react'
+import { ArrowRight, Filter, Search } from 'lucide-react'
 
 const statusGroups = ['All', 'Pending', 'In Review', 'Resolved', 'Escalated']
 
@@ -12,7 +13,12 @@ export default function AdminComplaints() {
   useEffect(() => {
     async function load() {
       const data = await fetchAllComplaints()
-      setItems(data)
+      setItems(
+        data.map((d) => ({
+          ...d,
+          date: d.createdAt && d.createdAt.toDate ? d.createdAt.toDate().toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : d.date ?? ''
+        }))
+      )
     }
     load()
   }, [])
@@ -108,12 +114,13 @@ export default function AdminComplaints() {
                 <th className="px-4 py-4 text-slate-500">Status</th>
                 <th className="px-4 py-4 text-slate-500">Priority</th>
                 <th className="px-4 py-4 text-slate-500">Date</th>
+                <th className="px-4 py-4 text-slate-500">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={7}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={8}>
                     No records found for the selected status or search.
                   </td>
                 </tr>
@@ -139,6 +146,11 @@ export default function AdminComplaints() {
                     </td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{item.priority}</td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300">{item.date}</td>
+                    <td className="px-4 py-4">
+                      <Link to={`/admin/complaints/${item.id}`} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                        Review <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

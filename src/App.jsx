@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext'
 import { DarkModeProvider } from './context/DarkModeContext'
 import RequireAuth from './routes/RequireAuth'
 import AppShell from './components/layout/AppShell'
+import ErrorBoundary from './components/common/ErrorBoundary'
 
 import AuthLogin from './pages/auth/Login'
 import AuthRegister from './pages/auth/Register'
@@ -29,6 +30,7 @@ export default function App() {
     <BrowserRouter>
       <DarkModeProvider>
         <AuthProvider>
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Home />} />
 
@@ -62,6 +64,7 @@ export default function App() {
                   <Routes>
                     <Route path="dashboard" element={<AdminDashboard />} />
                     <Route path="complaints" element={<AdminComplaints />} />
+                    <Route path="complaints/:id" element={<StudentComplaintDetail />} />
                     <Route path="reports" element={<AdminReports />} />
                     <Route path="departments" element={<AdminDepartments />} />
                     <Route path="faculties" element={<AdminFaculties />} />
@@ -75,6 +78,7 @@ export default function App() {
 
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </ErrorBoundary>
       </AuthProvider>
       </DarkModeProvider>
     </BrowserRouter>

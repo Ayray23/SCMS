@@ -38,7 +38,7 @@ const events = [
 ]
 
 export default function StudentDashboard() {
-  const { profile } = useAuth()
+  const { user, profile } = useAuth()
   const [complaints, setComplaints] = useState([])
   const [statsState, setStatsState] = useState(stats)
   const [recent, setRecent] = useState(recentComplaints)
@@ -47,7 +47,8 @@ export default function StudentDashboard() {
     let mounted = true
     async function load() {
       try {
-        const id = profile?.id ?? 'demo-student'
+        const id = user?.uid
+        if (!id) return
         const data = await fetchComplaintsByStudent(id)
         if (!mounted) return
         setComplaints(data)
@@ -82,7 +83,7 @@ export default function StudentDashboard() {
     return () => {
       mounted = false
     }
-  }, [profile])
+  }, [user])
   const statusClass = (status) =>
     status === 'Resolved'
       ? 'bg-emerald-100 text-emerald-700'

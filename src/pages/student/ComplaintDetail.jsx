@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit3 } from 'lucide-react'
 import { getComplaintById, updateComplaint, addComplaintEvent, fetchComplaintEvents, withdrawComplaint } from '../../services/complaintService'
+import { addNotification } from '../../services/notificationService'
 import { useAuth } from '../../context/AuthContext'
 import { SkeletonCard } from '../../components/common/Skeleton'
 import toast from 'react-hot-toast'
@@ -40,7 +41,7 @@ export default function ComplaintDetail() {
       } catch (err) {
         // if error, navigate back
         console.error(err)
-        if (mounted) navigate('/student/complaints')
+        if (mounted) navigate(isAdmin ? '/admin/complaints' : '/student/complaints')
       } finally {
         if (mounted) setLoading(false)
       }
@@ -55,7 +56,7 @@ export default function ComplaintDetail() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/student/complaints" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+          <Link to={isAdmin ? "/admin/complaints" : "/student/complaints"} className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
             <ArrowLeft className="h-4 w-4" /> Back to list
           </Link>
         </div>
@@ -122,6 +123,16 @@ export default function ComplaintDetail() {
       } catch (e) {
         console.warn('Failed to record event', e)
       }
+      try {
+        await addNotification({
+          userId: complaint.studentId,
+          title: `Update on ${complaint.referenceNumber ?? complaint.title}`,
+          message: reply ? `Status changed to ${status}: ${reply}` : `Status changed to ${status}`,
+          complaintId: complaint.id,
+        })
+      } catch (e) {
+        console.warn('Failed to send notification', e)
+      }
       toast.success('Update saved')
       setReply('')
     } catch (err) {
@@ -168,7 +179,7 @@ export default function ComplaintDetail() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/student/complaints" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
+          <Link to={isAdmin ? "/admin/complaints" : "/student/complaints"} className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900">
             <ArrowLeft className="h-4 w-4" /> Back to list
           </Link>
         </div>
